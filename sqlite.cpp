@@ -5,48 +5,6 @@
 
 using namespace std;
 
-#define MAX_LENGTH_COMMAND 128
-
-bool DEBUG = false;
-
-void print_message(string message){
-    if(DEBUG) cout << message << "\n";
-}
-
-vector<string> read_input(){
-
-    cout << "sqlite > ";
-    vector<string> input;
-    string inp_line;
-        
-    getline(cin, inp_line);
-    istringstream iss(inp_line);
-
-    string token;
-    while(iss >> token){
-        input.push_back(token);
-    }
-    return input;
-}
-
-void process_META_COMMANDS(vector<string> input){
-    string string_exit(".exit");
-    if(input[0].compare(string_exit) == 0){
-        cout << "byeee\n";
-        exit(EXIT_SUCCESS);
-    }
-    else{
-        cout << "Unrecognized command\n";
-    }
-    
-}
-
-typedef struct{
-    int id;
-    string username;
-    string email;
-} Row;
-
 #define process_normal_COMMANDS_SUCCESS 0
 #define process_normal_INP_COMMAND_FAILURE 1
 #define process_normal_SEL_COMMAND_FAILURE 2
@@ -62,6 +20,49 @@ const int EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
 const int ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 
 
+
+bool DEBUG = false;
+
+void print_message(string message){
+    if(DEBUG) cout << message << "\n";
+}
+
+vector<string> read_input(){
+    cout << "sqlite > ";
+    vector<string> input;
+    string inp_line;
+        
+    getline(cin, inp_line);
+    istringstream iss(inp_line);
+
+    string token;
+    while(iss >> token){
+        input.push_back(token);
+    }
+    return input;
+}
+
+// commands which begin with . are meta commands, processed in this
+void process_META_COMMANDS(vector<string> input){
+    string string_exit(".exit");
+    if(input[0].compare(string_exit) == 0){
+        cout << "byeee\n";
+        exit(EXIT_SUCCESS);
+    }
+    else{
+        cout << "Unrecognized command\n";
+    }
+    
+}
+
+// using a predifined table struct rn 
+typedef struct{
+    int id;
+    string username;
+    string email;
+} Row;
+
+
 const int PAGE_SIZE = 4096;
 #define TABLE_MAX_PAGES 100
 const int ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
@@ -69,7 +70,7 @@ const int TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 
 // Table is the way our data stored in the memory
 typedef struct{
-    int num_rows;                 // the number of rows currently in table
+    int num_rows;                    // the number of rows currently in table
     uint8_t* pages[TABLE_MAX_PAGES]; // an array of pointers to pages ( max 100 pages )
 
 } Table;
@@ -88,12 +89,13 @@ row 46
 row 47
 row 48
 
-13th page 12th
+13th page (12th accd to indexing)
 row 49
 row 50
 
-
 */
+
+
 uint8_t* row_slot_in_memory(Table* table, int row_number){
     print_message("row_slot_in_memory()");
     // theres no ( + 1 ) as its indexed from 0 in table->pages[]
@@ -162,17 +164,21 @@ void deserialize_row(uint8_t *source, Row* destination){
     memcpy(&(destination->email), source + EMAIL_OFFSET, EMAIL_SIZE );
 }
 
+
 void print_row(Row* row){
     cout << "\nid -> " << row->id << "\nusername -> " << row->username << "\nemail -> " << row->email << "\n";
 }
 
-
+// commands other than meta commands
 int normal_COMMANDS(vector<string> input, Table* table){
     print_message("Enter normal_COMMANDS");
+
+
     string string_insert("insert");
     string string_select("select");
+
     if(input[0].compare(string_insert) == 0){
-        // insert
+        // this is an insert statement
         print_message("Insert statement detected");
 
         if(input.size() < 4) return process_normal_INP_COMMAND_FAILURE;
@@ -197,7 +203,8 @@ int normal_COMMANDS(vector<string> input, Table* table){
         return process_normal_COMMANDS_SUCCESS;
     }
     else if(input[0].compare(string_select) == 0){
-        // select 
+        // this is a select statement
+        // rn it just does select * from table;
         print_message("Select statement");
 
         Row row;
@@ -220,7 +227,7 @@ int normal_COMMANDS(vector<string> input, Table* table){
 }
 
 
-
+// Initializing a new table
 Table* new_table(){
     print_message("new_table()");
     print_message("Initializing a new table");
@@ -250,14 +257,13 @@ void process_input(vector<string> input, Table* table){
     }
 }
 
-int main(){
+int main(){ 
+
+    cout << "Welcome to sqlite\n";
 
     // creates a table object with 0 rows
     Table* table = new_table();
-
-
-
-    cout << "Welcome to sqlite\n";
+    
     while(true){
     
         vector<string> input = read_input();
