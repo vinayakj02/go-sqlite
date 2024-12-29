@@ -10,6 +10,13 @@ using namespace std;
 #define process_normal_SEL_COMMAND_FAILURE 2
 #define TABLE_FILLED 3
 
+// using a predifined table struct rn 
+typedef struct{
+    int id;
+    string username;
+    string email;
+} Row;
+
 #define size_of_attribute(Struct, Attribute) sizeof(((Struct *)0)->Attribute); // returns size of the attribute
 const int ID_SIZE = size_of_attribute(Row, id)
 const int USERNAME_SIZE = size_of_attribute(Row, username);
@@ -18,6 +25,18 @@ const int ID_OFFSET = 0;
 const int USERNAME_OFFSET = ID_OFFSET + ID_SIZE;
 const int EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
 const int ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
+
+const int PAGE_SIZE = 4096;
+#define TABLE_MAX_PAGES 100
+const int ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
+const int TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
+
+// Table is the way our data stored in the memory
+typedef struct{
+    int num_rows;                    // the number of rows currently in table
+    uint8_t* pages[TABLE_MAX_PAGES]; // an array of pointers to pages ( max 100 pages )
+
+} Table;
 
 
 
@@ -54,27 +73,6 @@ void process_META_COMMANDS(vector<string> input){
     }
     
 }
-
-// using a predifined table struct rn 
-typedef struct{
-    int id;
-    string username;
-    string email;
-} Row;
-
-
-const int PAGE_SIZE = 4096;
-#define TABLE_MAX_PAGES 100
-const int ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
-const int TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
-
-// Table is the way our data stored in the memory
-typedef struct{
-    int num_rows;                    // the number of rows currently in table
-    uint8_t* pages[TABLE_MAX_PAGES]; // an array of pointers to pages ( max 100 pages )
-
-} Table;
-
 
 /*
 scenario 
@@ -166,7 +164,7 @@ void deserialize_row(uint8_t *source, Row* destination){
 
 
 void print_row(Row* row){
-    cout << "\nid -> " << row->id << "\nusername -> " << row->username << "\nemail -> " << row->email << "\n";
+    printf("(%d, %s, %s)", row->id, &row->username, &row->email);
 }
 
 // commands other than meta commands
@@ -214,7 +212,8 @@ int normal_COMMANDS(vector<string> input, Table* table){
             print_row(&row);
             
         }
-        cout << table->num_rows << " rows returned.\n";
+
+        printf("\n\n%d rows returned\n",table->num_rows);
 
         print_message("Returning from normal_COMMANDS");
         return process_normal_COMMANDS_SUCCESS;
@@ -265,7 +264,6 @@ int main(){
     Table* table = new_table();
     
     while(true){
-    
         vector<string> input = read_input();
         process_input(input, table);
 
