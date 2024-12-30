@@ -31,11 +31,19 @@ const int PAGE_SIZE = 4096;
 const int ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
 const int TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 
+
+
+typedef struct{
+    int file_descriptior;
+    int file_length;
+    uint8_t* pages[TABLE_MAX_PAGES];
+} Pager;
+
 // Table is the way our data stored in the memory
 typedef struct{
     int num_rows;                    // the number of rows currently in table
-    uint8_t* pages[TABLE_MAX_PAGES]; // an array of pointers to pages ( max 100 pages )
-
+    // uint8_t* pages[TABLE_MAX_PAGES]; // an array of pointers to pages ( max 100 pages )
+    Pager* pager;
 } Table;
 
 
@@ -43,7 +51,7 @@ typedef struct{
 bool DEBUG = false;
 
 void print_message(string message){
-    if(DEBUG) cout << message << "\n";
+    if(DEBUG) printf("%s\n", &message);
 }
 
 vector<string> read_input(){
@@ -208,7 +216,7 @@ int normal_COMMANDS(vector<string> input, Table* table){
         Row row;
         for(int i=0;i<table->num_rows;i++){
             deserialize_row(row_slot_in_memory(table, i), &row);
-            cout << "\n";
+            printf("\n");
             print_row(&row);
             
         }
@@ -220,7 +228,7 @@ int normal_COMMANDS(vector<string> input, Table* table){
         
     }
     else{
-        cout << "Unrecognized keyword at the beginning\n";
+        printf("Unrecognized keyword at the beginning\n");
     }
     
 }
