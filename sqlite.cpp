@@ -2,6 +2,7 @@
 #include<string>
 #include<vector>
 #include<sstream>
+#include <fcntl.h>
 
 using namespace std;
 
@@ -33,6 +34,7 @@ const int TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 
 
 
+// an abstraction over table, to read and write from a persistent file
 typedef struct{
     int file_descriptior;
     int file_length;
@@ -233,11 +235,33 @@ int normal_COMMANDS(vector<string> input, Table* table){
     
 }
 
+Pager* pager_open(string filename){
+
+    int fd = open(filename.c_str(), O_CREAT);
+    if(fd == -1){
+        printf("unable to open the file\n");
+        exit(EXIT_FAILURE);
+    }
+
+
+    Pager* pager = (Pager*)malloc(sizeof(Pager));
+    pager->file_descriptior = fd;
+    pager->file_length = file_length;
+
+    for(int i=0;i<TABLE_MAX_PAGES,i++){
+        pager->pages[i] = NULL;
+    }
+
+    return pager;
+}
 
 // Initializing a new table
-Table* new_table(){
+Table* db_open(string filename){
+    
     print_message("new_table()");
     print_message("Initializing a new table");
+
+    Pager* pager = pager_open(filename);
     Table* table = (Table*)malloc(sizeof(Table));
     table->num_rows = 0;
     for(int i=0;i<TABLE_MAX_PAGES; i++){

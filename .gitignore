@@ -32,3 +32,6 @@
 *.app
 
 sqlite
+
+#vs code
+.vscode
