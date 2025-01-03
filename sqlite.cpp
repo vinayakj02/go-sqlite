@@ -3,6 +3,7 @@
 #include<vector>
 #include<sstream>
 #include <fcntl.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -103,20 +104,61 @@ row 50
 
 */
 
+uint8_t* get_page(Pager* pager, int page_number){
+    if(page_number > TABLE_MAX_PAGES){
+        printf("Exceeded page num, out of bounds");
+        exit(EXIT_FAILURE);
+    }
 
+    // if it's NULL, it's a cache miss, meaning this row was never read or written in this session.
+    if(pager->pages[page_number] == NULL){
+        // allocate memory
+        uint8_t* page = (uint8_t*)(PAGE_SIZE);
+        int num_pages = pager->file_length/PAGE_SIZE;
+
+        // if there's a partial page
+        if(pager->file_length % PAGE_SIZE){
+            num_pages++;
+        }
+
+        // we read the page
+        if(page_number <= num_pages){
+            //movess fd to fd + page_number * PAGE_SIZE
+            lseek(pager->file_descriptior, page_number * PAGE_SIZE, SEEK_SET);
+            //copy from fd to page
+            ssize_t bytes_read = read(pager->file_descriptior, page, PAGE_SIZE);
+            if(bytes_read == -1){
+                printf("Error in reading file");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        pager->pages[page_number] = page;
+
+    }
+
+    return pager->pages[page_number];
+    
+
+}
+
+// to get address of the row
 uint8_t* row_slot_in_memory(Table* table, int row_number){
     print_message("row_slot_in_memory()");
     // theres no ( + 1 ) as its indexed from 0 in table->pages[]
     int page_number = int(row_number/ROWS_PER_PAGE);
 
-    uint8_t* page = table->pages[page_number];
-    if(page == NULL){
-        // this is when youre adding a new row and its in a new page 
-        // allocate mem when trying to access page 
-        page = static_cast<uint8_t*>(malloc(PAGE_SIZE));
-        table->pages[page_number] = page;
-    
-    }
+    // uint8_t* page = table->pager->pages[page_number];
+    // if(page == NULL){
+    //     // this is when youre adding a new row and its in a new page 
+    //     // allocate mem when trying to access page 
+    //     page = static_cast<uint8_t*>(malloc(PAGE_SIZE));
+    //     table->pages[page_number] = page;
+    // }
+
+    // get address of the page
+    uint8_t* page = get_page(table->pager, page_number);
+
     // two rows inside 12th
     int row_offset = row_number % ROWS_PER_PAGE;
 
@@ -178,7 +220,7 @@ void print_row(Row* row){
 }
 
 // commands other than meta commands
-int normal_COMMANDS(vector<string> input, Table* table){
+int process_normal_COMMANDS(vector<string> input, Table* table){
     print_message("Enter normal_COMMANDS");
 
 
@@ -236,40 +278,44 @@ int normal_COMMANDS(vector<string> input, Table* table){
 }
 
 Pager* pager_open(string filename){
-
-    int fd = open(filename.c_str(), O_CREAT);
+    int fd = open(filename.c_str(), O_RDWR | O_CREAT);
     if(fd == -1){
-        printf("unable to open the file\n");
+        printf("Unable to open the file\n");
         exit(EXIT_FAILURE);
     }
 
+    off_t file_length = lseek(fd, 0, SEEK_END);
 
-    Pager* pager = (Pager*)malloc(sizeof(Pager));
+    //Pager* pager = malloc(sizeof(Pager));
+    Pager* pager = new Pager();
     pager->file_descriptior = fd;
     pager->file_length = file_length;
-
-    for(int i=0;i<TABLE_MAX_PAGES,i++){
+    
+    // initially the pager abstrcation, pages are NULL, 
+    // so nothing has been read, if read once then we load into this which is basically our memory or our cache
+    for(int i=0;i<TABLE_MAX_PAGES;i++){
         pager->pages[i] = NULL;
     }
 
     return pager;
+
 }
 
 // Initializing a new table
 Table* db_open(string filename){
     
-    print_message("new_table()");
-    print_message("Initializing a new table");
-
     Pager* pager = pager_open(filename);
+    int num_rows = pager->file_length / ROW_SIZE;
     Table* table = (Table*)malloc(sizeof(Table));
-    table->num_rows = 0;
-    for(int i=0;i<TABLE_MAX_PAGES; i++){
-        table->pages[i] = NULL;
-    }
-    print_message("Table initialized");
+    table->num_rows = num_rows;
+    table->pager = pager;
+
     return table;
 
+}
+
+void db_close(Table* table){
+    
 }
 
 void process_input(vector<string> input, Table* table){
@@ -284,7 +330,7 @@ void process_input(vector<string> input, Table* table){
     }
     else{
         // normal command
-        normal_COMMANDS(input, table);
+        process_normal_COMMANDS(input, table);
     }
 }
 
@@ -293,7 +339,8 @@ int main(){
     cout << "Welcome to sqlite\n";
 
     // creates a table object with 0 rows
-    Table* table = new_table();
+    string filename = "sqlite.db";
+    Table* table = db_open(filename);
     
     while(true){
         vector<string> input = read_input();
