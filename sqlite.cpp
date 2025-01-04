@@ -51,7 +51,7 @@ typedef struct{
 
 
 
-bool DEBUG = false;
+bool DEBUG = true;
 
 void print_message(string message){
     if(DEBUG) printf("%s\n", &message);
@@ -105,6 +105,7 @@ row 50
 */
 
 uint8_t* get_page(Pager* pager, int page_number){
+    print_message("inside get_page()");
     if(page_number > TABLE_MAX_PAGES){
         printf("Exceeded page num, out of bounds");
         exit(EXIT_FAILURE);
@@ -113,7 +114,7 @@ uint8_t* get_page(Pager* pager, int page_number){
     // if it's NULL, it's a cache miss, meaning this row was never read or written in this session.
     if(pager->pages[page_number] == NULL){
         // allocate memory
-        uint8_t* page = (uint8_t*)(PAGE_SIZE);
+        uint8_t* page = (uint8_t*)malloc(PAGE_SIZE);
         int num_pages = pager->file_length/PAGE_SIZE;
 
         // if there's a partial page
@@ -136,7 +137,7 @@ uint8_t* get_page(Pager* pager, int page_number){
         pager->pages[page_number] = page;
 
     }
-
+    print_message("returning from get_page()");
     return pager->pages[page_number];
     
 
@@ -165,6 +166,7 @@ uint8_t* row_slot_in_memory(Table* table, int row_number){
     // destination in memory is page mem + row_offset*ROW_SIZE
     int byte_offset = row_offset * ROW_SIZE;
 
+    print_message("returning from row_slot_in_memory()");
     return page + byte_offset;
     
 }
@@ -188,9 +190,14 @@ void serialize_row(Row* source, uint8_t* destination) {
     // Verify memory layout
     //fprintf(stderr, "Offsets: ID=%d, Username=%d, Email=%d\n", ID_OFFSET, USERNAME_OFFSET, EMAIL_OFFSET);
 
+    print_message("Copying data from source to destination");
+    print_message("Copying ID");
     memcpy(destination + ID_OFFSET, &(source->id), ID_SIZE);
+    print_message("Copying Username");
     memcpy(destination + USERNAME_OFFSET, &(source->username), USERNAME_SIZE);
+    print_message("Copying Email");
     memcpy(destination + EMAIL_OFFSET, &(source->email), EMAIL_SIZE);
+    print_message("serialize_row() exited");
 }
 
 
@@ -212,6 +219,8 @@ void deserialize_row(uint8_t *source, Row* destination){
     memcpy(&(destination->id), source + ID_OFFSET, ID_SIZE );
     memcpy(&(destination->username), source + USERNAME_OFFSET, USERNAME_SIZE );
     memcpy(&(destination->email), source + EMAIL_OFFSET, EMAIL_SIZE );
+
+    print_message("deserialize_row() exited");
 }
 
 
@@ -278,7 +287,7 @@ int process_normal_COMMANDS(vector<string> input, Table* table){
 }
 
 Pager* pager_open(string filename){
-    int fd = open(filename.c_str(), O_RDWR | O_CREAT);
+    int fd = open(filename.c_str(), O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
     if(fd == -1){
         printf("Unable to open the file\n");
         exit(EXIT_FAILURE);
@@ -287,7 +296,7 @@ Pager* pager_open(string filename){
     off_t file_length = lseek(fd, 0, SEEK_END);
 
     //Pager* pager = malloc(sizeof(Pager));
-    Pager* pager = new Pager();
+    Pager* pager = (Pager*)malloc(sizeof(Pager));
     pager->file_descriptior = fd;
     pager->file_length = file_length;
     
@@ -315,7 +324,7 @@ Table* db_open(string filename){
 }
 
 void db_close(Table* table){
-    
+
 }
 
 void process_input(vector<string> input, Table* table){
@@ -332,6 +341,22 @@ void process_input(vector<string> input, Table* table){
         // normal command
         process_normal_COMMANDS(input, table);
     }
+}
+
+
+// the actual write to the file happens here
+void pager_flush(Pager* pager, int page_number, int size){
+    print_message("pager_flush()");
+
+    if(pager->pages[page_number] == NULL){
+        printf("Null page cannot be flushed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    off_t offset = lseek(pager->file_descriptior, page_number*PAGE_SIZE, SEEK_SET)
+    
+
+    print_message("Returning from pager_flush()");
 }
 
 int main(){ 
