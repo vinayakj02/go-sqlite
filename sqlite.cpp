@@ -323,7 +323,78 @@ Table* db_open(string filename){
 
 }
 
+
+// the actual write to the file happens here
+void pager_flush(Pager* pager, int page_number, int size){
+    print_message("pager_flush()");
+
+    if(pager->pages[page_number] == NULL){
+        printf("Null page cannot be flushed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // moves pager->fd to pager->fd + middle argument
+    off_t offset = lseek(pager->file_descriptior, page_number*PAGE_SIZE, SEEK_SET);
+    if(offset == -1){
+        printf("Error in lseek()\n");
+        exit(EXIT_FAILURE);
+    }    
+
+    ssize_t bytes_written = write(pager->file_descriptior, pager->pages[page_number], size);
+    if(bytes_written == -1){
+        printf("Error in writing to file\n");
+        exit(EXIT_FAILURE);
+    }
+    print_message("Returning from pager_flush()");
+}
+
+// flushes page cache to disk
+// closes db file close()
+// free mem 
 void db_close(Table* table){
+
+    Pager* pager = table->pager;
+    
+    int num_full_pages = table->num_rows/ROWS_PER_PAGE;
+
+    for(int i=0; i < num_full_pages; i++){
+        if(pager->pages[i] == NULL) continue; // do nothing
+        
+            pager_flush(pager, i, PAGE_SIZE); // write into file
+            free(pager->pages[i]);
+            pager->pages[i] = NULL;
+    }
+
+    // partial page at the end of this 
+    int num_additional_rows = table->num_rows % ROWS_PER_PAGE;
+    if(num_additional_rows > 0){
+        int page_num = num_full_pages;
+        if(pager->pages[page_num] != NULL){
+            pager_flush(pager, page_num, num_additional_rows * ROW_SIZE); // write into file
+            free(pager->pages[page_num]);
+            pager->pages[page_num] = NULL;
+        }
+    }
+
+    // close file
+    int result = close(pager->file_descriptior);
+    if(result == -1){
+        printf("Error closing the file\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for(int i = 0;i<TABLE_MAX_PAGES; i++){
+        
+        if(pager->pages[i]){
+            // to avoid some kinda dangling pointers ?? 
+            free(pager->pages[i]);
+            pager->pages[i] = NULL;
+        }
+
+    }
+
+    free(pager);
+    free(table);
 
 }
 
@@ -344,20 +415,7 @@ void process_input(vector<string> input, Table* table){
 }
 
 
-// the actual write to the file happens here
-void pager_flush(Pager* pager, int page_number, int size){
-    print_message("pager_flush()");
 
-    if(pager->pages[page_number] == NULL){
-        printf("Null page cannot be flushed\n");
-        exit(EXIT_FAILURE);
-    }
-
-    off_t offset = lseek(pager->file_descriptior, page_number*PAGE_SIZE, SEEK_SET)
-    
-
-    print_message("Returning from pager_flush()");
-}
 
 int main(){ 
 
