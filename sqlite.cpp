@@ -12,6 +12,7 @@ using namespace std;
 #define process_normal_SEL_COMMAND_FAILURE 2
 #define TABLE_FILLED 3
 
+bool DEBUG = false;
 // using a predifined table struct rn 
 typedef struct{
     int id;
@@ -51,7 +52,7 @@ typedef struct{
 
 
 
-bool DEBUG = true;
+
 
 void print_message(string message){
     if(DEBUG) printf("%s\n", &message);
@@ -72,18 +73,6 @@ vector<string> read_input(){
     return input;
 }
 
-// commands which begin with . are meta commands, processed in this
-void process_META_COMMANDS(vector<string> input){
-    string string_exit(".exit");
-    if(input[0].compare(string_exit) == 0){
-        cout << "byeee\n";
-        exit(EXIT_SUCCESS);
-    }
-    else{
-        cout << "Unrecognized command\n";
-    }
-    
-}
 
 /*
 scenario 
@@ -398,6 +387,20 @@ void db_close(Table* table){
 
 }
 
+// commands which begin with . are meta commands, processed in this
+void process_META_COMMANDS(vector<string> input, Table* table){
+    string string_exit(".exit");
+    if(input[0].compare(string_exit) == 0){
+        db_close(table);
+        cout << "byeee\n";
+        exit(EXIT_SUCCESS);
+    }
+    else{
+        cout << "Unrecognized command\n";
+    }
+    
+}
+
 void process_input(vector<string> input, Table* table){
     print_message("process_input()");
     if(input.size() < 1){
@@ -406,7 +409,7 @@ void process_input(vector<string> input, Table* table){
     }
     if(input[0][0] == '.'){
         // meta command
-        process_META_COMMANDS(input);
+        process_META_COMMANDS(input, table);
     }
     else{
         // normal command
@@ -417,7 +420,7 @@ void process_input(vector<string> input, Table* table){
 
 
 
-int main(){ 
+int main(int argc, char* argv[]){ 
 
     cout << "Welcome to sqlite\n";
 
