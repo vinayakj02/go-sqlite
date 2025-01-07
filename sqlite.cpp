@@ -50,16 +50,37 @@ typedef struct{
     Pager* pager;
 } Table;
 
+typedef struct{
+    Table* table;
+    int row_num;
+    bool end_of_table;
+} Cursor;
 
+// cursor pointing to the start of the table
+Cursor* table_start(Table* table){
+    Cursor* cursor = (Cursor*)malloc(sizeof(Cursor));
+    cursor->table = table;
+    cursor->end_of_table = (table->num_rows == 0);
+    cursor->row_num = 0;
+    return cursor;
+}
 
+//cursor pointing to the end of the table
+Cursor* table_end(Table* table){
+    Cursor* cursor = (Cursor*)malloc(sizeof(Cursor));
+    cursor->end_of_table = true;
+    cursor->row_num = table->num_rows;
+    cursor->table = table;
 
+    return cursor;
+}
 
 void print_message(string message){
     if(DEBUG) printf("%s\n", &message);
 }
 
 vector<string> read_input(){
-    cout << "sqlite > ";
+    printf("sqlite > ");
     vector<string> input;
     string inp_line;
         
@@ -133,8 +154,12 @@ uint8_t* get_page(Pager* pager, int page_number){
 }
 
 // to get address of the row
-uint8_t* row_slot_in_memory(Table* table, int row_number){
+// uint8_t* row_slot_in_memory(Table* table, int row_number){
+uint8_t* cursor_value(Cursor* cursor){
     print_message("row_slot_in_memory()");
+
+    int row_number = cursor->row_num;
+
     // theres no ( + 1 ) as its indexed from 0 in table->pages[]
     int page_number = int(row_number/ROWS_PER_PAGE);
 
@@ -147,7 +172,7 @@ uint8_t* row_slot_in_memory(Table* table, int row_number){
     // }
 
     // get address of the page
-    uint8_t* page = get_page(table->pager, page_number);
+    uint8_t* page = get_page(cursor->table->pager, page_number);
 
     // two rows inside 12th
     int row_offset = row_number % ROWS_PER_PAGE;
@@ -160,6 +185,13 @@ uint8_t* row_slot_in_memory(Table* table, int row_number){
     
 }
 
+void cursor_advance(Cursor* cursor){
+    cursor->row_num += 1;
+    if(cursor->row_num >= cursor->table->num_rows){
+        // we have reached the end of the table
+        cursor->end_of_table = true;
+    }
+}
 
 // copies data from row object into destination memory 
 void serialize_row(Row* source, uint8_t* destination) {
@@ -244,9 +276,11 @@ int process_normal_COMMANDS(vector<string> input, Table* table){
 
         print_message("Row read from input completely.");
 
-        serialize_row(&row, row_slot_in_memory(table, table->num_rows));
+        Cursor* cursor = table_end(table);
+        
+        serialize_row(&row, cursor_value(cursor));
         table->num_rows++;
-
+        free(cursor);
         print_message("Returning from normal_COMMANDS");
         return process_normal_COMMANDS_SUCCESS;
     }
@@ -254,14 +288,25 @@ int process_normal_COMMANDS(vector<string> input, Table* table){
         // this is a select statement
         // rn it just does select * from table;
         print_message("Select statement");
-
+        
+        Cursor* cursor = table_start(table);
         Row row;
-        for(int i=0;i<table->num_rows;i++){
-            deserialize_row(row_slot_in_memory(table, i), &row);
+        while (!(cursor->end_of_table)){
+            deserialize_row(cursor_value(cursor), &row);
+            cursor_advance(cursor);
             printf("\n");
             print_row(&row);
-            
         }
+
+        free(cursor);
+
+        
+        // for(int i=0;i<table->num_rows;i++){
+        //     deserialize_row(row_slot_in_memory(table, i), &row);
+        //     printf("\n");
+        //     print_row(&row);
+            
+        // }
 
         printf("\n\n%d rows returned\n",table->num_rows);
 
