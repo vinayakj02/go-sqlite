@@ -1,6 +1,6 @@
-# sqlitev
+# go-sqlite
 
-Writing a simpler version of SQLite from scratch in C++, work in progress!
+Trying to sqlite in go (changed my mind after starting it in c++ lol)
 
 ### status 
 
