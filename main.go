@@ -15,7 +15,21 @@ const (
 	EMAIL_SIZE    = 255
 	ROW_SIZE      = 4 + USERNAME_SIZE + EMAIL_SIZE
 	DB_NAME       = "data.db"
+
+	PAGE_SIZE     = 4096
+	MAX_PAGES     = 100
+	ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE
 )
+
+type Pager struct {
+	fileDescriptor *os.File
+	fileLength     uint32
+	pages          [MAX_PAGES]*Page
+}
+
+type Page struct {
+	data [PAGE_SIZE]byte
+}
 
 type Row struct {
 	id       uint32
@@ -23,7 +37,85 @@ type Row struct {
 	email    [EMAIL_SIZE]byte
 }
 
-var table []Row
+type Table struct {
+	pager   *Pager
+	numRows uint32
+}
+
+var globalTable *Table
+
+func (p *Pager) flush(pageNum uint32) {
+	if pageNum > MAX_PAGES {
+		fmt.Println("page number out of bounds : ", pageNum)
+		os.Exit(1)
+	}
+
+	if p.pages[pageNum] == nil {
+		fmt.Println("page not found")
+		return
+	}
+
+	page_offset := int64(pageNum * PAGE_SIZE)
+	_, err := p.fileDescriptor.Seek(page_offset, 0)
+	if err != nil {
+		fmt.Println("error !! : ", err)
+		return
+	}
+
+	fmt.Println("writing here !! pageNum : ", pageNum)
+	_, err = p.fileDescriptor.Write(p.pages[pageNum].data[:])
+	if err != nil {
+		fmt.Println("error in writing to file :( : ", err)
+	}
+}
+func newPager(filename string) (*Pager, error) {
+	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	fileInfo, err := file.Stat()
+	fileLength := uint32(fileInfo.Size())
+
+	pager := Pager{
+		fileDescriptor: file,
+		fileLength:     fileLength,
+		pages:          [MAX_PAGES]*Page{},
+	}
+
+	return &pager, nil
+}
+
+func newTable(filename string) (*Table, error) {
+	pager, err := newPager(filename)
+	if err != nil {
+		return nil, err
+	}
+	table := Table{
+		pager:   pager,
+		numRows: 0,
+	}
+	return &table, nil
+}
+
+func (p *Pager) getPage(pageNum uint32) *Page { // this is a method of the struct ?
+	if pageNum > MAX_PAGES {
+		fmt.Println("page number out of bounds : ", pageNum)
+		os.Exit(1)
+	}
+
+	if p.pages[pageNum] == nil {
+		p.pages[pageNum] = &Page{}
+	}
+	return p.pages[pageNum]
+}
+
+func getRowSlot(table *Table, rowNum uint32) []byte {
+	pageNum := rowNum / ROWS_PER_PAGE
+	page := table.pager.getPage(pageNum)
+	rowOffset := (rowNum % ROWS_PER_PAGE) * ROW_SIZE
+	return page.data[rowOffset : rowOffset+ROW_SIZE]
+}
 
 func serializeRow(row Row) []byte {
 	buffer := make([]byte, 4+USERNAME_SIZE+EMAIL_SIZE)
@@ -57,42 +149,30 @@ func insertRow(query []string) {
 	copy(row.username[:], query[2])
 	copy(row.email[:], query[3])
 
-	file, err := os.OpenFile("data.db", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("error opening file:", err)
-		return
-	}
-	defer file.Close()
+	// file, err := os.OpenFile("data.db", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// if err != nil {
+	// 	fmt.Println("error opening file:", err)
+	// 	return
+	// }
+	// defer file.Close()
+	destination := getRowSlot(globalTable, globalTable.numRows)
 
 	serialized_row := serializeRow(row)
-	// fmt.Println("serialized Row:", serialized_row)
 
-	_, err = file.Write(serialized_row)
-	if err != nil {
-		fmt.Println("error writing to file:", err)
-		return
-	}
+	// _, err = file.Write(serialized_row)
+	// if err != nil {
+	// 	fmt.Println("error writing to file:", err)
+	// 	return
+	// }
+
+	copy(destination, serialized_row)
+	globalTable.numRows++
 }
 
 func selectRows() {
-	file, err := os.Open(DB_NAME)
-	if err != nil {
-		fmt.Println("error opening file :(, make sure db exists", err)
-		return
-	}
-	defer file.Close()
-
-	buffer := make([]byte, ROW_SIZE)
-	for { // loops until buffer not multiple of ROW_SIZE
-		n, err := file.Read(buffer)
-		if err != nil {
-			break
-		}
-		if n < ROW_SIZE { // End of file or incomplete row
-			break
-		}
-		row := deserializeRow(buffer)
-		// fmt.Print(row)
+	for i := range uint32(globalTable.numRows) {
+		source := getRowSlot(globalTable, uint32(i))
+		row := deserializeRow(source)
 		fmt.Printf("(%d, %s, %s)\n", row.id, strings.TrimRight(string(row.username[:]), "\x00"), strings.TrimRight(string(row.email[:]), "\x00"))
 	}
 }
@@ -107,6 +187,7 @@ func dump_db() {
 
 func handle_META_COMMAND(query []string) {
 	if query[0] == ".exit" {
+		globalTable.close()
 		fmt.Println("byeee...")
 		syscall.Exit(0)
 	} else if query[0] == ".help" {
@@ -129,9 +210,26 @@ func handle_SQL_COMMAND(query []string) {
 		fmt.Println("unrecognized command")
 	}
 }
+func (t *Table) close() {
+	numPages := ((t.numRows + (ROWS_PER_PAGE + 1)) / ROWS_PER_PAGE)
+	for page_num := range uint32(numPages) {
+		if t.pager.pages[page_num] != nil {
+			t.pager.flush(page_num)
+		}
+	}
+
+	t.pager.fileDescriptor.Close()
+}
 
 func main() {
 	fmt.Println("welcome to goSQLite")
+	var err error
+	globalTable, err = newTable(DB_NAME)
+	if err != nil {
+		fmt.Println("error opening db : ", err)
+		return
+	}
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for true {
 		fmt.Print("sqlite > ")
@@ -140,7 +238,7 @@ func main() {
 		}
 		query := strings.Fields(strings.TrimSpace(scanner.Text()))
 
-		if query[0] == "" || len(query) == 0 {
+		if len(query) == 0 || query[0] == "" {
 			continue
 		} else if query[0][0] == '.' {
 			handle_META_COMMAND(query)
