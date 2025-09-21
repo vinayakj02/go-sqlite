@@ -14,6 +14,7 @@ const (
 	USERNAME_SIZE = 32
 	EMAIL_SIZE    = 255
 	ROW_SIZE      = 4 + USERNAME_SIZE + EMAIL_SIZE
+	DB_NAME       = "data.db"
 )
 
 type Row struct {
@@ -43,13 +44,12 @@ func deserializeRow(buffer []byte) Row {
 
 func insertRow(query []string) {
 	if len(query) != 4 {
-		fmt.Println("Syntax error. Usage: insert <id> <username> <email>")
+		fmt.Println("syntax error -> usage: insert <id> <username> <email>")
 		return
 	}
-
 	id, err := strconv.Atoi(query[1])
 	if err != nil {
-		fmt.Println("Invalid ID:", query[1])
+		fmt.Println("invalid id:", query[1])
 		return
 	}
 	var row Row
@@ -59,25 +59,25 @@ func insertRow(query []string) {
 
 	file, err := os.OpenFile("data.db", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("Error opening file:", err)
+		fmt.Println("error opening file:", err)
 		return
 	}
 	defer file.Close()
 
 	serialized_row := serializeRow(row)
-	fmt.Println("Serialized Row:", serialized_row)
+	// fmt.Println("serialized Row:", serialized_row)
 
 	_, err = file.Write(serialized_row)
 	if err != nil {
-		fmt.Println("Error writing to file:", err)
+		fmt.Println("error writing to file:", err)
 		return
 	}
 }
 
 func selectRows() {
-	file, err := os.Open("data.db")
+	file, err := os.Open(DB_NAME)
 	if err != nil {
-		fmt.Println("Error opening file:", err)
+		fmt.Println("error opening file :(, make sure db exists", err)
 		return
 	}
 	defer file.Close()
@@ -92,19 +92,30 @@ func selectRows() {
 			break
 		}
 		row := deserializeRow(buffer)
-		fmt.Print(row)
+		// fmt.Print(row)
 		fmt.Printf("(%d, %s, %s)\n", row.id, strings.TrimRight(string(row.username[:]), "\x00"), strings.TrimRight(string(row.email[:]), "\x00"))
+	}
+}
+
+func dump_db() {
+	err := os.Remove(DB_NAME)
+	if err != nil {
+		fmt.Println("error in dumping db :(")
+		return
 	}
 }
 
 func handle_META_COMMAND(query []string) {
 	if query[0] == ".exit" {
-		fmt.Println("Byeee...")
+		fmt.Println("byeee...")
 		syscall.Exit(0)
 	} else if query[0] == ".help" {
-		fmt.Println("This is a simple SQLite db written in go.")
+		fmt.Println("this is a simple SQLite db written in go.")
+	} else if query[0] == ".dump" {
+		fmt.Println("dumping db...")
+		dump_db()
 	} else {
-		fmt.Println("Unrecognized command ", query[0])
+		fmt.Println("unrecognized command ", query[0])
 	}
 
 }
@@ -115,12 +126,12 @@ func handle_SQL_COMMAND(query []string) {
 	} else if strings.EqualFold(query[0], "insert") {
 		insertRow(query)
 	} else {
-		fmt.Println("Unrecognized command")
+		fmt.Println("unrecognized command")
 	}
 }
 
 func main() {
-	fmt.Println("Welcome to goSQLite")
+	fmt.Println("welcome to goSQLite")
 	scanner := bufio.NewScanner(os.Stdin)
 	for true {
 		fmt.Print("sqlite > ")
