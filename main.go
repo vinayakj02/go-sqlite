@@ -42,6 +42,30 @@ type Table struct {
 	numRows uint32
 }
 
+type Cursor struct {
+	endOfTable bool
+	table      *Table
+	rowNum     uint32
+}
+
+func beginTable(table *Table) *Cursor {
+	cursor := Cursor{
+		endOfTable: table.numRows == 0,
+		table:      table,
+		rowNum:     0,
+	}
+	return &cursor
+}
+
+func (c *Cursor) getCursorValue() []byte {
+	return getRowSlot(c.table, c.rowNum)
+}
+
+func (c *Cursor) cursorAdvance() {
+	c.rowNum++
+	c.endOfTable = (c.rowNum >= c.table.numRows)
+}
+
 var globalTable *Table
 
 func (p *Pager) flush(pageNum uint32) {
@@ -62,7 +86,6 @@ func (p *Pager) flush(pageNum uint32) {
 		return
 	}
 
-	fmt.Println("writing here !! pageNum : ", pageNum)
 	_, err = p.fileDescriptor.Write(p.pages[pageNum].data[:])
 	if err != nil {
 		fmt.Println("error in writing to file :( : ", err)
@@ -155,31 +178,26 @@ func insertRow(query []string) {
 	copy(row.username[:], query[2])
 	copy(row.email[:], query[3])
 
-	// file, err := os.OpenFile("data.db", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	// if err != nil {
-	// 	fmt.Println("error opening file:", err)
-	// 	return
-	// }
-	// defer file.Close()
 	destination := getRowSlot(globalTable, globalTable.numRows)
 
 	serialized_row := serializeRow(row)
-
-	// _, err = file.Write(serialized_row)
-	// if err != nil {
-	// 	fmt.Println("error writing to file:", err)
-	// 	return
-	// }
 
 	copy(destination, serialized_row)
 	globalTable.numRows++
 }
 
 func selectRows() {
-	for i := range uint32(globalTable.numRows) {
-		source := getRowSlot(globalTable, uint32(i))
-		row := deserializeRow(source)
+	// for i := range uint32(globalTable.numRows) {
+	// 	source := getRowSlot(globalTable, uint32(i))
+	// 	row := deserializeRow(source)
+	// 	fmt.Printf("(%d, %s, %s)\n", row.id, strings.TrimRight(string(row.username[:]), "\x00"), strings.TrimRight(string(row.email[:]), "\x00"))
+	// }
+	cursor := beginTable(globalTable)
+	fmt.Println(cursor.rowNum, cursor.endOfTable)
+	for !cursor.endOfTable {
+		row := deserializeRow(cursor.getCursorValue())
 		fmt.Printf("(%d, %s, %s)\n", row.id, strings.TrimRight(string(row.username[:]), "\x00"), strings.TrimRight(string(row.email[:]), "\x00"))
+		cursor.cursorAdvance()
 	}
 }
 
@@ -223,7 +241,6 @@ func (t *Table) close() {
 			t.pager.flush(page_num)
 		}
 	}
-
 	t.pager.fileDescriptor.Close()
 }
 
