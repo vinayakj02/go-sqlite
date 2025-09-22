@@ -93,19 +93,25 @@ func newTable(filename string) (*Table, error) {
 	}
 	table := Table{
 		pager:   pager,
-		numRows: 0,
+		numRows: pager.fileLength / ROW_SIZE,
 	}
 	return &table, nil
 }
 
 func (p *Pager) getPage(pageNum uint32) *Page { // this is a method of the struct ?
-	if pageNum > MAX_PAGES {
+	if pageNum >= MAX_PAGES {
 		fmt.Println("page number out of bounds : ", pageNum)
 		os.Exit(1)
 	}
 
 	if p.pages[pageNum] == nil {
 		p.pages[pageNum] = &Page{}
+
+		if pageNum < p.fileLength/PAGE_SIZE {
+			offset := int64(pageNum * PAGE_SIZE)
+			p.fileDescriptor.Seek(offset, 0)
+			p.fileDescriptor.Read(p.pages[pageNum].data[:])
+		}
 	}
 	return p.pages[pageNum]
 }
@@ -211,7 +217,7 @@ func handle_SQL_COMMAND(query []string) {
 	}
 }
 func (t *Table) close() {
-	numPages := ((t.numRows + (ROWS_PER_PAGE + 1)) / ROWS_PER_PAGE)
+	numPages := ((t.numRows + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE)
 	for page_num := range uint32(numPages) {
 		if t.pager.pages[page_num] != nil {
 			t.pager.flush(page_num)
@@ -225,6 +231,7 @@ func main() {
 	fmt.Println("welcome to goSQLite")
 	var err error
 	globalTable, err = newTable(DB_NAME)
+
 	if err != nil {
 		fmt.Println("error opening db : ", err)
 		return
