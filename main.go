@@ -48,11 +48,20 @@ type Cursor struct {
 	rowNum     uint32
 }
 
-func beginTable(table *Table) *Cursor {
+func tableStart(table *Table) *Cursor {
 	cursor := Cursor{
 		endOfTable: table.numRows == 0,
 		table:      table,
 		rowNum:     0,
+	}
+	return &cursor
+}
+
+func tableEnd(table *Table) *Cursor {
+	cursor := Cursor{
+		endOfTable: true,
+		table:      table,
+		rowNum:     table.numRows,
 	}
 	return &cursor
 }
@@ -178,7 +187,8 @@ func insertRow(query []string) {
 	copy(row.username[:], query[2])
 	copy(row.email[:], query[3])
 
-	destination := getRowSlot(globalTable, globalTable.numRows)
+	// destination := getRowSlot(globalTable, globalTable.numRows)
+	destination := tableEnd(globalTable).getCursorValue()
 
 	serialized_row := serializeRow(row)
 
@@ -192,7 +202,7 @@ func selectRows() {
 	// 	row := deserializeRow(source)
 	// 	fmt.Printf("(%d, %s, %s)\n", row.id, strings.TrimRight(string(row.username[:]), "\x00"), strings.TrimRight(string(row.email[:]), "\x00"))
 	// }
-	cursor := beginTable(globalTable)
+	cursor := tableStart(globalTable)
 	fmt.Println(cursor.rowNum, cursor.endOfTable)
 	for !cursor.endOfTable {
 		row := deserializeRow(cursor.getCursorValue())
